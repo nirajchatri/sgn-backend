@@ -73,3 +73,16 @@ npm run pack
 
 Proxy `/neu/api` → `http://127.0.0.1:3001/api` (or this Ubuntu host).  
 Upload frontend `dist/` to IIS `neu\` separately — never start the API from that folder.
+
+### 502 Bad Gateway on CMS Save
+
+IIS is proxying `/neu/api` but Node is not reachable at the URL in `web.config`.
+
+```bash
+cd /home/ubuntu/sgn-website-backend
+curl -s http://127.0.0.1:3001/api/health          # must include WebsiteVirtualTour
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3001/api/virtual-tour
+pm2 restart sgn-api   # or ./start-api.sh
+```
+
+On the IIS server, change `neu\web.config` API rewrite to `http://UBUNTU_IP:3001` if the API is not on Windows.

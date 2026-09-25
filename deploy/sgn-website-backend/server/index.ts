@@ -121,6 +121,7 @@ app.get('/api/health', async (_req, res) => {
           'WebsiteContact',
           'WebsiteAbout',
           'WebsiteGallery',
+          'WebsiteVirtualTour',
           'WebsitePages',
           'WebsiteHomeSections',
           'WebsiteAlumni',
