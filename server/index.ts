@@ -89,7 +89,9 @@ if (corsOriginRaw && corsOriginRaw !== '*') {
 } else {
   app.use(cors());
 }
-app.use(express.json({ limit: '50mb' }));
+const BODY_LIMIT = process.env.API_BODY_LIMIT?.trim() || '100mb';
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', fallthrough: true }));
 
 function requireCmsAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -103,9 +105,17 @@ function requireCmsAuth(req: express.Request, res: express.Response, next: expre
 
 function sendError(res: express.Response, err: unknown, fallback: string) {
   console.error(fallback, err);
-  res.status(500).json({
-    error: err instanceof Error ? err.message : fallback,
-  });
+  const msg = err instanceof Error ? err.message : fallback;
+  const status =
+    typeof err === 'object' &&
+    err &&
+    'status' in err &&
+    typeof (err as { status?: unknown }).status === 'number'
+      ? (err as { status: number }).status
+      : msg.toLowerCase().includes('entity too large')
+        ? 413
+        : 500;
+  res.status(status).json({ error: msg });
 }
 
 app.get('/api/health', async (_req, res) => {
@@ -376,6 +386,32 @@ app.post('/api/alumni/register', async (req, res) => {
     sendError(res, err, 'Failed to register alumni');
   }
 });
+
+/** Clear 413 when JSON body exceeds API_BODY_LIMIT (default 100mb). */
+app.use(
+  (
+    err: unknown,
+    _req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    if (!err || typeof err !== 'object') {
+      next(err);
+      return;
+    }
+    const e = err as { type?: string; status?: number; statusCode?: number; message?: string };
+    if (e.type === 'entity.too.large' || e.status === 413 || e.statusCode === 413) {
+      res.status(413).json({
+        error:
+          'Request entity too large. Use Upload for images (not huge pasted data). ' +
+          'On Ubuntu nginx set: client_max_body_size 100M; then reload nginx. ' +
+          'Or set API_BODY_LIMIT=100mb in .env and restart the API.',
+      });
+      return;
+    }
+    next(err);
+  }
+);
 
 app.listen(port, host, () => {
   const mssql = getMssqlDiagnostics();
