@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "sgn-backend",
+			"path": "sgn-backend"
+		}
+	],
+	"settings": {}
+}

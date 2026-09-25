@@ -1,8 +1,12 @@
 node_modules/
 dist/
 .env
+uploads/
+deploy/*.tar.gz
 *.log
 .DS_Store
 coverage/
 .idea/
 .vscode/
+_legacy_src/
+
