@@ -54,11 +54,19 @@ import {
 loadEnv();
 
 const app = express();
-const port = Number(process.env.API_PORT || 3001);
+const port = Number(process.env.API_PORT || process.env.PORT || 3001);
 const host = (process.env.API_HOST || '0.0.0.0').trim() || '0.0.0.0';
 const cmsApiKey =
   process.env.CMS_API_KEY?.trim() ||
-  `${process.env.VITE_CMS_USERNAME || 'admin'}:${process.env.VITE_CMS_PASSWORD || 'sgn@cms2026'}`;
+  `${
+    process.env.CMS_ADMIN_USERNAME?.trim() ||
+    process.env.VITE_CMS_USERNAME?.trim() ||
+    'admin'
+  }:${
+    process.env.CMS_ADMIN_PASSWORD?.trim() ||
+    process.env.VITE_CMS_PASSWORD?.trim() ||
+    'sgn@cms2026'
+  }`;
 
 const uploadsDir = resolveUploadsDir();
 ensureUploadsDir();
@@ -74,7 +82,13 @@ function uploadsPublicBase(): string {
   return raw.startsWith('/') ? raw.replace(/\/$/, '') : `/${raw.replace(/\/$/, '')}`;
 }
 
-app.use(cors());
+const corsOriginRaw = process.env.CORS_ORIGIN?.trim();
+if (corsOriginRaw && corsOriginRaw !== '*') {
+  const origins = corsOriginRaw.split(',').map((s) => s.trim()).filter(Boolean);
+  app.use(cors({ origin: origins, credentials: true }));
+} else {
+  app.use(cors());
+}
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', fallthrough: true }));
 

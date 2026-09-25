@@ -8,9 +8,34 @@ const rootDir = path.resolve(__dirname, '..');
 
 /** Load .env from project root (works even if cwd is wrong on Windows services). */
 export function loadEnv(): dotenv.DotenvConfigOutput {
-  return dotenv.config({
+  const result = dotenv.config({
     path: path.join(rootDir, '.env'),
   });
+  normalizeLegacyEnv();
+  return result;
+}
+
+/**
+ * Accept older production .env keys (DB_*, PORT) used by the previous API package.
+ * Preferred names: MSSQL_*, API_PORT.
+ */
+function normalizeLegacyEnv(): void {
+  const map: Array<[legacy: string, modern: string]> = [
+    ['PORT', 'API_PORT'],
+    ['DB_SERVER', 'MSSQL_SERVER'],
+    ['DB_PORT', 'MSSQL_PORT'],
+    ['DB_NAME', 'MSSQL_DATABASE'],
+    ['DB_USER', 'MSSQL_USER'],
+    ['DB_PASSWORD', 'MSSQL_PASSWORD'],
+    ['DB_ENCRYPT', 'MSSQL_ENCRYPT'],
+    ['DB_TRUST_SERVER_CERTIFICATE', 'MSSQL_TRUST_SERVER_CERTIFICATE'],
+  ];
+  for (const [legacy, modern] of map) {
+    const legacyVal = process.env[legacy]?.trim();
+    if (legacyVal && !process.env[modern]?.trim()) {
+      process.env[modern] = process.env[legacy];
+    }
+  }
 }
 
 function hasDiscreteConfig(): boolean {
