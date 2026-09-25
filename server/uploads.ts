@@ -73,11 +73,12 @@ export function listUploadedFiles(): string[] {
 
 function sanitizeUploadBasename(name: string | undefined | null): string {
   const raw = (name || '').trim().replace(/\\/g, '/').split('/').pop() || '';
+  // Keep the original display name; strip only path/unsafe filesystem characters
   const safe = raw
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/-+/g, '-')
+    .replace(/[<>:"|?*\x00-\x1f]/g, '')
     .replace(/^\.+/, '')
-    .slice(0, 80);
+    .trim()
+    .slice(0, 120);
   return safe || 'document.pdf';
 }
 
@@ -100,8 +101,16 @@ export function savePdfBuffer(
   ensureUploadsDir();
   const base = sanitizeUploadBasename(originalName);
   const withExt = /\.pdf$/i.test(base) ? base : `${base}.pdf`;
-  const filename = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${withExt}`;
-  fs.writeFileSync(path.join(getUploadsDir(), filename), buffer);
+  // Keep the original filename; only suffix -2, -3… if that name already exists
+  let filename = withExt;
+  const dir = getUploadsDir();
+  if (fs.existsSync(path.join(dir, filename))) {
+    const stem = withExt.replace(/\.pdf$/i, '');
+    let n = 2;
+    while (fs.existsSync(path.join(dir, `${stem}-${n}.pdf`))) n += 1;
+    filename = `${stem}-${n}.pdf`;
+  }
+  fs.writeFileSync(path.join(dir, filename), buffer);
   return { url: `/uploads/${filename}`, filename };
 }
 
