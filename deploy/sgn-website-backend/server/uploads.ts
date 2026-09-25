@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DATA_URL_RE = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/;
+const PDF_DATA_URL_RE = /^data:application\/pdf;base64,(.+)$/i;
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -14,17 +15,35 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/gif': '.gif',
 };
 
-/** Prefer IIS static folder so /neu/uploads works without Node proxy. */
+const MAX_PDF_BYTES = 25 * 1024 * 1024;
+
+/**
+ * CMS images must land in the IIS site uploads folder so the website can serve
+ * https://app.shantigyanniketan.org/uploads/… as static files.
+ *
+ * Production (API on Ubuntu): mount the IIS uploads share, then set:
+ *   UPLOADS_DIR=/mnt/sgn-iis-uploads
+ *
+ * Production (API on Windows): set directly, e.g.:
+ *   UPLOADS_DIR=C:\inetpub\wwwroot\app.shantigyanniketan.org\uploads
+ */
 export function resolveUploadsDir(): string {
   const fromEnv = process.env.UPLOADS_DIR?.trim();
   if (fromEnv) return path.resolve(fromEnv);
 
-  const iisNeuUploads = 'C:\\inetpub\\wwwroot\\shantigyanniketan.org\\neu\\uploads';
   if (process.platform === 'win32') {
-    const neuRoot = 'C:\\inetpub\\wwwroot\\shantigyanniketan.org\\neu';
-    if (fs.existsSync(neuRoot)) return iisNeuUploads;
+    const candidates = [
+      'C:\\inetpub\\wwwroot\\app.shantigyanniketan.org\\uploads',
+      'C:\\inetpub\\wwwroot\\shantigyanniketan.org\\app\\uploads',
+      'C:\\inetpub\\wwwroot\\shantigyanniketan.org\\neu\\uploads',
+    ];
+    for (const dir of candidates) {
+      const parent = path.dirname(dir);
+      if (fs.existsSync(parent)) return dir;
+    }
   }
 
+  // Local Mac/Linux dev fallback (Vite proxies /uploads → this folder)
   return path.resolve(__dirname, '../uploads');
 }
 
@@ -49,7 +68,53 @@ export function listUploadedFiles(): string[] {
   ensureUploadsDir();
   return fs
     .readdirSync(getUploadsDir())
-    .filter((name) => /\.(jpe?g|png|webp|gif)$/i.test(name));
+    .filter((name) => /\.(jpe?g|png|webp|gif|pdf)$/i.test(name));
+}
+
+function sanitizeUploadBasename(name: string | undefined | null): string {
+  const raw = (name || '').trim().replace(/\\/g, '/').split('/').pop() || '';
+  const safe = raw
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^\.+/, '')
+    .slice(0, 80);
+  return safe || 'document.pdf';
+}
+
+export function savePdfBuffer(
+  buffer: Buffer,
+  originalName?: string | null
+): { url: string; filename: string } {
+  if (!buffer?.length) {
+    throw new Error('PDF file is empty.');
+  }
+  if (buffer.length > MAX_PDF_BYTES) {
+    throw new Error('PDF is too large (max 25 MB).');
+  }
+  // %PDF magic
+  const head = buffer.subarray(0, 5).toString('utf8');
+  if (!head.startsWith('%PDF')) {
+    throw new Error('File does not look like a PDF. Please upload a .pdf file.');
+  }
+
+  ensureUploadsDir();
+  const base = sanitizeUploadBasename(originalName);
+  const withExt = /\.pdf$/i.test(base) ? base : `${base}.pdf`;
+  const filename = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${withExt}`;
+  fs.writeFileSync(path.join(getUploadsDir(), filename), buffer);
+  return { url: `/uploads/${filename}`, filename };
+}
+
+export function saveDataUrlPdf(dataUrl: string, originalName?: string | null): {
+  url: string;
+  filename: string;
+} {
+  const match = PDF_DATA_URL_RE.exec(dataUrl.trim());
+  if (!match) {
+    throw new Error('Invalid PDF data. Upload a PDF file.');
+  }
+  const buffer = Buffer.from(match[1], 'base64');
+  return savePdfBuffer(buffer, originalName);
 }
 
 export function saveDataUrlImage(dataUrl: string): { url: string; filename: string } {
@@ -69,21 +134,44 @@ export function saveDataUrlImage(dataUrl: string): { url: string; filename: stri
   ensureUploadsDir();
   const filename = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
   fs.writeFileSync(path.join(getUploadsDir(), filename), buffer);
+  // Always website-relative — IIS serves /uploads from the site folder
   return { url: `/uploads/${filename}`, filename };
 }
 
-/** Ensure gallery / virtual-tour image URLs work under /neu (IIS subdirectory). */
+function normalizeUploadPublicUrl(url: string, publicBase: string): string {
+  let u = url.trim();
+  if (!u) return u;
+
+  // Absolute api.* upload links → website-relative
+  if (u.startsWith('http://') || u.startsWith('https://')) {
+    try {
+      const parsed = new URL(u);
+      u = parsed.pathname;
+    } catch {
+      return u;
+    }
+  }
+
+  if (u === '/neu') u = '/';
+  else if (u.startsWith('/neu/')) u = u.slice(4) || '/';
+
+  if (u.startsWith('/uploads/')) {
+    return publicBase ? `${publicBase}${u}` : u;
+  }
+  return u;
+}
+
+/** Rewrite gallery image URLs for the public site base ('' = root). */
 export function rewriteGalleryUploadUrls(
   payload: Record<string, unknown> | null,
-  publicBase = '/neu'
+  publicBase = ''
 ): Record<string, unknown> | null {
   if (!payload) return null;
-  const base = (publicBase || '/neu').replace(/\/$/, '') || '/neu';
+  const base = (publicBase || '').replace(/\/$/, '');
 
   const fix = (url: unknown): unknown => {
     if (typeof url !== 'string' || !url) return url;
-    if (url.startsWith('/uploads/')) return `${base}${url}`;
-    return url;
+    return normalizeUploadPublicUrl(url, base);
   };
 
   const albums = Array.isArray(payload.albums)
@@ -114,15 +202,14 @@ export function rewriteGalleryUploadUrls(
 
 export function rewriteVirtualTourUploadUrls(
   payload: Record<string, unknown> | null,
-  publicBase = '/neu'
+  publicBase = ''
 ): Record<string, unknown> | null {
   if (!payload) return null;
-  const base = (publicBase || '/neu').replace(/\/$/, '') || '/neu';
+  const base = (publicBase || '').replace(/\/$/, '');
 
   const fix = (url: unknown): unknown => {
     if (typeof url !== 'string' || !url) return url;
-    if (url.startsWith('/uploads/')) return `${base}${url}`;
-    return url;
+    return normalizeUploadPublicUrl(url, base);
   };
 
   const spots = Array.isArray(payload.spots)

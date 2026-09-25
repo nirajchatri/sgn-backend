@@ -146,6 +146,24 @@ export async function ensureCmsSchema(): Promise<void> {
       );
     END;
 
+    IF OBJECT_ID(N'dbo.WebsiteHolidays', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.WebsiteHolidays (
+        Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteHolidays PRIMARY KEY,
+        PayloadJson NVARCHAR(MAX) NOT NULL,
+        UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteHolidays_UpdatedAt DEFAULT (SYSUTCDATETIME())
+      );
+    END;
+
+    IF OBJECT_ID(N'dbo.WebsiteSchoolInformation', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.WebsiteSchoolInformation (
+        Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteSchoolInformation PRIMARY KEY,
+        PayloadJson NVARCHAR(MAX) NOT NULL,
+        UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteSchoolInformation_UpdatedAt DEFAULT (SYSUTCDATETIME())
+      );
+    END;
+
     IF OBJECT_ID(N'dbo.WebsitePages', N'U') IS NULL
     BEGIN
       CREATE TABLE dbo.WebsitePages (
@@ -717,6 +735,66 @@ export async function replaceVirtualTour(
   return (await fetchVirtualTour()) ?? payload;
 }
 
+export async function fetchHolidays(): Promise<Record<string, unknown> | null> {
+  await ensureCmsSchema();
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input('Id', sql.NVarChar(32), SINGLETON_ID)
+    .query(`SELECT PayloadJson FROM dbo.WebsiteHolidays WHERE Id = @Id`);
+  const row = result.recordset[0] as { PayloadJson?: string } | undefined;
+  if (!row?.PayloadJson) return null;
+  return parseJson(row.PayloadJson, null);
+}
+
+export async function replaceHolidays(
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  await ensureCmsSchema();
+  const pool = await getPool();
+  await pool
+    .request()
+    .input('Id', sql.NVarChar(32), SINGLETON_ID)
+    .input('PayloadJson', sql.NVarChar(sql.MAX), JSON.stringify(payload))
+    .query(`
+      MERGE dbo.WebsiteHolidays AS t
+      USING (SELECT @Id AS Id) AS s ON t.Id = s.Id
+      WHEN MATCHED THEN UPDATE SET PayloadJson = @PayloadJson, UpdatedAt = SYSUTCDATETIME()
+      WHEN NOT MATCHED THEN INSERT (Id, PayloadJson, UpdatedAt) VALUES (@Id, @PayloadJson, SYSUTCDATETIME());
+    `);
+  return (await fetchHolidays()) ?? payload;
+}
+
+export async function fetchSchoolInformation(): Promise<Record<string, unknown> | null> {
+  await ensureCmsSchema();
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input('Id', sql.NVarChar(32), SINGLETON_ID)
+    .query(`SELECT PayloadJson FROM dbo.WebsiteSchoolInformation WHERE Id = @Id`);
+  const row = result.recordset[0] as { PayloadJson?: string } | undefined;
+  if (!row?.PayloadJson) return null;
+  return parseJson(row.PayloadJson, null);
+}
+
+export async function replaceSchoolInformation(
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  await ensureCmsSchema();
+  const pool = await getPool();
+  await pool
+    .request()
+    .input('Id', sql.NVarChar(32), SINGLETON_ID)
+    .input('PayloadJson', sql.NVarChar(sql.MAX), JSON.stringify(payload))
+    .query(`
+      MERGE dbo.WebsiteSchoolInformation AS t
+      USING (SELECT @Id AS Id) AS s ON t.Id = s.Id
+      WHEN MATCHED THEN UPDATE SET PayloadJson = @PayloadJson, UpdatedAt = SYSUTCDATETIME()
+      WHEN NOT MATCHED THEN INSERT (Id, PayloadJson, UpdatedAt) VALUES (@Id, @PayloadJson, SYSUTCDATETIME());
+    `);
+  return (await fetchSchoolInformation()) ?? payload;
+}
+
 export type PagePayload = {
   id: string;
   slug: string;
@@ -923,6 +1001,8 @@ export type CmsBundle = {
   about: Record<string, unknown> | null;
   gallery: Record<string, unknown> | null;
   virtualTour: Record<string, unknown> | null;
+  holidays: Record<string, unknown> | null;
+  schoolInformation: Record<string, unknown> | null;
   pages: PagePayload[];
   homeSections: Record<string, unknown> | null;
   alumni: AlumniPayload[];
@@ -942,6 +1022,8 @@ export async function fetchCmsBundle(): Promise<CmsBundle> {
     about,
     gallery,
     virtualTour,
+    holidays,
+    schoolInformation,
     pages,
     homeSections,
     alumni,
@@ -957,6 +1039,8 @@ export async function fetchCmsBundle(): Promise<CmsBundle> {
     fetchAbout(),
     fetchGallery(),
     fetchVirtualTour(),
+    fetchHolidays(),
+    fetchSchoolInformation(),
     fetchPages(),
     fetchHomeSections(),
     fetchAlumni(),
@@ -973,6 +1057,8 @@ export async function fetchCmsBundle(): Promise<CmsBundle> {
     about,
     gallery,
     virtualTour,
+    holidays,
+    schoolInformation,
     pages,
     homeSections,
     alumni,
@@ -991,6 +1077,8 @@ export async function replaceCmsBundle(bundle: {
   about?: Record<string, unknown>;
   gallery?: Record<string, unknown>;
   virtualTour?: Record<string, unknown>;
+  holidays?: Record<string, unknown>;
+  schoolInformation?: Record<string, unknown>;
   pages: PagePayload[];
   homeSections: Record<string, unknown>;
   alumni: AlumniPayload[];
@@ -1006,6 +1094,8 @@ export async function replaceCmsBundle(bundle: {
   if (bundle.about) await replaceAbout(bundle.about);
   if (bundle.gallery) await replaceGallery(bundle.gallery);
   if (bundle.virtualTour) await replaceVirtualTour(bundle.virtualTour);
+  if (bundle.holidays) await replaceHolidays(bundle.holidays);
+  if (bundle.schoolInformation) await replaceSchoolInformation(bundle.schoolInformation);
   await replacePages(bundle.pages);
   await replaceHomeSections(bundle.homeSections);
   await replaceAlumni(bundle.alumni ?? []);

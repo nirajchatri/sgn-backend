@@ -63,6 +63,8 @@ echo.
 echo Starting SGN API on http://127.0.0.1:3001
 echo Health:  http://127.0.0.1:3001/api/health
 echo Virtual tour table: dbo.WebsiteVirtualTour  ^( /api/virtual-tour ^)
+echo Holidays table: dbo.WebsiteHolidays  ^( /api/holidays ^)
+echo School Information table: dbo.WebsiteSchoolInformation  ^( /api/school-information ^)
 echo.
 echo Keep this window OPEN. Closing it stops the CMS / MSSQL connection.
 echo.

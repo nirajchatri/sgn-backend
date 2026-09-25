@@ -37,6 +37,8 @@ echo ""
 echo "Starting SGN API on http://0.0.0.0:3001"
 echo "Health: http://127.0.0.1:3001/api/health"
 echo "Virtual tour: GET/PUT /api/virtual-tour → dbo.WebsiteVirtualTour"
+echo "Holidays: GET/PUT /api/holidays → dbo.WebsiteHolidays"
+echo "School Information: GET/PUT /api/school-information → dbo.WebsiteSchoolInformation"
 echo "Keep this process running (use pm2 in production)."
 echo ""
 

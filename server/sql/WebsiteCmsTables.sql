@@ -153,6 +153,26 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'dbo.WebsiteHolidays', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.WebsiteHolidays (
+    Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteHolidays PRIMARY KEY,
+    PayloadJson NVARCHAR(MAX) NOT NULL,
+    UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteHolidays_UpdatedAt DEFAULT (SYSUTCDATETIME())
+  );
+END
+GO
+
+IF OBJECT_ID(N'dbo.WebsiteSchoolInformation', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.WebsiteSchoolInformation (
+    Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteSchoolInformation PRIMARY KEY,
+    PayloadJson NVARCHAR(MAX) NOT NULL,
+    UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteSchoolInformation_UpdatedAt DEFAULT (SYSUTCDATETIME())
+  );
+END
+GO
+
 IF OBJECT_ID(N'dbo.WebsitePages', N'U') IS NULL
 BEGIN
   CREATE TABLE dbo.WebsitePages (

@@ -46,9 +46,26 @@ Frontend (`sgn-website`) proxies `/api` → `http://127.0.0.1:3001` in Vite.
 |-------|--------|
 | Table | `dbo.WebsiteVirtualTour` (created on API start via `ensureCmsSchema`) |
 | API | `GET` / `PUT` `/api/virtual-tour` |
-| Body | `{ "data": { "title", "subtitle", "spots": [ { id, title, category, description, features, mediaType: "image"\|"video", imageUrl, videoUrl? } ] } }` |
 
 CMS UI: frontend **360° Virtual Tour** module.
+
+## Holidays (MSSQL)
+
+| Piece | Detail |
+|-------|--------|
+| Table | `dbo.WebsiteHolidays` (created on API start via `ensureCmsSchema`) |
+| API | `GET` / `PUT` `/api/holidays` |
+
+CMS UI: frontend **Holidays** module (`/cms/holidays`). Seeded from the legacy gazetted holidays list (session 2026-27).
+
+## School Information (MSSQL)
+
+| Piece | Detail |
+|-------|--------|
+| Table | `dbo.WebsiteSchoolInformation` (created on API start via `ensureCmsSchema`) |
+| API | `GET` / `PUT` `/api/school-information` |
+
+CMS UI: frontend **School Information** module (`/cms/school-information`). Seeded from the legacy CBSE disclosure page (`page.aspx?id=127`). Separate from site settings (`WebsiteSchoolInfo` / `/api/school-info`).
 
 ## Main CMS endpoints
 
@@ -58,6 +75,8 @@ CMS UI: frontend **360° Virtual Tour** module.
 | `/api/cms` | Full CMS bundle |
 | `/api/gallery` | Photo / video gallery |
 | `/api/virtual-tour` | 360° tour spots |
+| `/api/holidays` | Gazetted holidays / school breaks |
+| `/api/school-information` | CBSE school information disclosure |
 | `/api/pages`, `/api/menu`, `/api/notices`, … | Other Website* tables |
 | `/api/uploads` | Image upload (CMS auth) |
 
@@ -80,8 +99,10 @@ IIS is proxying `/neu/api` but Node is not reachable at the URL in `web.config`.
 
 ```bash
 cd /home/ubuntu/sgn-website-backend
-curl -s http://127.0.0.1:3001/api/health          # must include WebsiteVirtualTour
+curl -s http://127.0.0.1:3001/api/health          # must include WebsiteVirtualTour, WebsiteHolidays, WebsiteSchoolInformation
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3001/api/virtual-tour
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3001/api/holidays
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3001/api/school-information
 pm2 restart sgn-api   # or ./start-api.sh
 ```
 

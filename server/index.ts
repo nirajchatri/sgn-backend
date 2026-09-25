@@ -7,6 +7,8 @@ import {
   fetchAbout,
   fetchGallery,
   fetchVirtualTour,
+  fetchHolidays,
+  fetchSchoolInformation,
   fetchAnnouncements,
   fetchAlumni,
   fetchBlogPosts,
@@ -23,6 +25,8 @@ import {
   replaceAbout,
   replaceGallery,
   replaceVirtualTour,
+  replaceHolidays,
+  replaceSchoolInformation,
   replaceAnnouncements,
   replaceAlumni,
   replaceBlogPosts,
@@ -49,6 +53,8 @@ import {
   rewriteGalleryUploadUrls,
   rewriteVirtualTourUploadUrls,
   saveDataUrlImage,
+  saveDataUrlPdf,
+  savePdfBuffer,
 } from './uploads.js';
 
 loadEnv();
@@ -70,14 +76,14 @@ const cmsApiKey =
 
 const uploadsDir = resolveUploadsDir();
 ensureUploadsDir();
-console.log(`Uploads directory: ${uploadsDir} (${listUploadedFiles().length} image files)`);
+console.log(`Uploads directory: ${uploadsDir} (${listUploadedFiles().length} files)`);
 
-/** Public URL prefix for uploaded files (site is under /neu/). */
+/** Public URL prefix for uploaded files ('' = site root, '/neu' = legacy). */
 function uploadsPublicBase(): string {
   const raw =
     process.env.PUBLIC_BASE_PATH?.trim() ||
     process.env.VITE_BASE_PATH?.trim() ||
-    '/neu';
+    '';
   if (!raw || raw === '/') return '';
   return raw.startsWith('/') ? raw.replace(/\/$/, '') : `/${raw.replace(/\/$/, '')}`;
 }
@@ -85,9 +91,24 @@ function uploadsPublicBase(): string {
 const corsOriginRaw = process.env.CORS_ORIGIN?.trim();
 if (corsOriginRaw && corsOriginRaw !== '*') {
   const origins = corsOriginRaw.split(',').map((s) => s.trim()).filter(Boolean);
-  app.use(cors({ origin: origins, credentials: true }));
+  app.use(
+    cors({
+      origin: origins,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'X-CMS-Key', 'Authorization', 'X-Filename'],
+      methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    })
+  );
 } else {
-  app.use(cors());
+  // Reflect request Origin — needed when CMS on shantigyanniketan.org calls api.*
+  app.use(
+    cors({
+      origin: true,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'X-CMS-Key', 'Authorization', 'X-Filename'],
+      methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    })
+  );
 }
 const BODY_LIMIT = process.env.API_BODY_LIMIT?.trim() || '100mb';
 app.use(express.json({ limit: BODY_LIMIT }));
@@ -127,6 +148,7 @@ app.get('/api/health', async (_req, res) => {
       await ensureCmsSchema();
       res.json({
         ok: true,
+        service: 'sgn-website-backend',
         api: true,
         database: 'mssql',
         mssql,
@@ -134,6 +156,15 @@ app.get('/api/health', async (_req, res) => {
           dir: uploadsDir,
           count: uploadFiles.length,
         },
+        routes: [
+          '/api/menu',
+          '/api/virtual-tour',
+          '/api/holidays',
+          '/api/school-information',
+          '/api/cms',
+          '/api/uploads',
+          '/api/uploads/document',
+        ],
         tables: [
           'WebsiteMenuItems',
           'WebsiteNotices',
@@ -146,6 +177,8 @@ app.get('/api/health', async (_req, res) => {
           'WebsiteAbout',
           'WebsiteGallery',
           'WebsiteVirtualTour',
+          'WebsiteHolidays',
+          'WebsiteSchoolInformation',
           'WebsitePages',
           'WebsiteHomeSections',
           'WebsiteAlumni',
@@ -180,13 +213,13 @@ app.get('/api/cms', async (_req, res) => {
     if (content.gallery) {
       content.gallery = rewriteGalleryUploadUrls(
         content.gallery,
-        uploadsPublicBase() || '/neu'
+        uploadsPublicBase()
       );
     }
     if (content.virtualTour) {
       content.virtualTour = rewriteVirtualTourUploadUrls(
         content.virtualTour,
-        uploadsPublicBase() || '/neu'
+        uploadsPublicBase()
       );
     }
     res.json({ content });
@@ -210,6 +243,8 @@ app.put('/api/cms', requireCmsAuth, async (req, res) => {
         about?: Record<string, unknown>;
         gallery?: Record<string, unknown>;
         virtualTour?: Record<string, unknown>;
+        holidays?: Record<string, unknown>;
+        schoolInformation?: Record<string, unknown>;
         pages: PagePayload[];
         homeSections: Record<string, unknown>;
         alumni: AlumniPayload[];
@@ -269,10 +304,10 @@ function singletonRoute(
     try {
       let data = await fetchFn();
       if (key === 'gallery') {
-        data = rewriteGalleryUploadUrls(data, uploadsPublicBase() || '/neu');
+        data = rewriteGalleryUploadUrls(data, uploadsPublicBase());
       }
       if (key === 'virtual tour') {
-        data = rewriteVirtualTourUploadUrls(data, uploadsPublicBase() || '/neu');
+        data = rewriteVirtualTourUploadUrls(data, uploadsPublicBase());
       }
       res.json({ data });
     } catch (err) {
@@ -290,19 +325,19 @@ function singletonRoute(
       let payload = body.data;
       if (key === 'gallery') {
         payload =
-          rewriteGalleryUploadUrls(payload, uploadsPublicBase() || '/neu') || payload;
+          rewriteGalleryUploadUrls(payload, uploadsPublicBase()) || payload;
       }
       if (key === 'virtual tour') {
         payload =
-          rewriteVirtualTourUploadUrls(payload, uploadsPublicBase() || '/neu') || payload;
+          rewriteVirtualTourUploadUrls(payload, uploadsPublicBase()) || payload;
       }
       const data = await replaceFn(payload);
       res.json({
         data:
           key === 'gallery'
-            ? rewriteGalleryUploadUrls(data, uploadsPublicBase() || '/neu')
+            ? rewriteGalleryUploadUrls(data, uploadsPublicBase())
             : key === 'virtual tour'
-              ? rewriteVirtualTourUploadUrls(data, uploadsPublicBase() || '/neu')
+              ? rewriteVirtualTourUploadUrls(data, uploadsPublicBase())
               : data,
       });
     } catch (err) {
@@ -324,26 +359,95 @@ singletonRoute('/api/contact', fetchContact, replaceContact, 'contact');
 singletonRoute('/api/about', fetchAbout, replaceAbout, 'about');
 singletonRoute('/api/gallery', fetchGallery, replaceGallery, 'gallery');
 singletonRoute('/api/virtual-tour', fetchVirtualTour, replaceVirtualTour, 'virtual tour');
+singletonRoute('/api/holidays', fetchHolidays, replaceHolidays, 'holidays');
+singletonRoute(
+  '/api/school-information',
+  fetchSchoolInformation,
+  replaceSchoolInformation,
+  'school information'
+);
 singletonRoute('/api/home-sections', fetchHomeSections, replaceHomeSections, 'home sections');
 
 /** Store one CMS image on disk; returns a short /uploads URL (avoids huge JSON payloads). */
 app.post('/api/uploads', requireCmsAuth, async (req, res) => {
   try {
     const dataUrl = typeof req.body?.dataUrl === 'string' ? req.body.dataUrl : '';
+    const filenameHint =
+      typeof req.body?.filename === 'string' ? req.body.filename : undefined;
+    if (dataUrl.startsWith('data:application/pdf')) {
+      const saved = saveDataUrlPdf(dataUrl, filenameHint);
+      res.status(201).json({ url: saved.url, filename: saved.filename, kind: 'pdf' });
+      return;
+    }
     if (!dataUrl.startsWith('data:image/')) {
-      res.status(400).json({ error: 'dataUrl (image data URL) is required' });
+      res.status(400).json({
+        error: 'dataUrl (image or PDF data URL) is required',
+      });
       return;
     }
     const saved = saveDataUrlImage(dataUrl);
-    const base = uploadsPublicBase();
+    // Always return root-relative /uploads/… (never /neu/uploads) — public site is at app.* root
     res.status(201).json({
-      url: `${base}${saved.url}`,
+      url: saved.url,
       filename: saved.filename,
+      kind: 'image',
     });
   } catch (err) {
-    sendError(res, err, 'Failed to upload image');
+    sendError(res, err, 'Failed to upload file');
   }
 });
+
+/**
+ * Binary PDF upload for School Information (and similar).
+ * Body = raw PDF bytes; Content-Type: application/pdf; optional X-Filename header.
+ * File is written to UPLOADS_DIR (IIS site uploads share in production).
+ */
+app.post(
+  '/api/uploads/document',
+  requireCmsAuth,
+  express.raw({
+    type: (req) => {
+      const ct = (req.headers['content-type'] || '').toLowerCase();
+      return (
+        ct.includes('application/pdf') ||
+        ct.includes('application/octet-stream') ||
+        ct === ''
+      );
+    },
+    limit: '25mb',
+  }),
+  async (req, res) => {
+    try {
+      const body = req.body;
+      const buffer = Buffer.isBuffer(body)
+        ? body
+        : body instanceof ArrayBuffer
+          ? Buffer.from(body)
+          : Buffer.isBuffer((body as { data?: Buffer })?.data)
+            ? (body as { data: Buffer }).data
+            : null;
+      if (!buffer?.length) {
+        res.status(400).json({
+          error:
+            'PDF body required. Send raw application/pdf bytes with X-CMS-Key (and optional X-Filename).',
+        });
+        return;
+      }
+      const nameHint =
+        typeof req.header('x-filename') === 'string'
+          ? decodeURIComponent(req.header('x-filename') || '')
+          : 'document.pdf';
+      const saved = savePdfBuffer(buffer, nameHint);
+      res.status(201).json({
+        url: saved.url,
+        filename: saved.filename,
+        kind: 'pdf',
+      });
+    } catch (err) {
+      sendError(res, err, 'Failed to upload PDF');
+    }
+  }
+);
 
 /** Public alumni directory — approved only */
 app.get('/api/alumni/public', async (_req, res) => {
@@ -417,7 +521,7 @@ app.listen(port, host, () => {
   const mssql = getMssqlDiagnostics();
   console.log(`SGN API listening on http://${host}:${port}`);
   console.log(
-    'CMS tables: menu, notices, hero-slides, announcements, blog, school-info, admissions, contact, about, gallery, virtual-tour, pages, home-sections, alumni'
+    'CMS tables: menu, notices, hero-slides, announcements, blog, school-info, admissions, contact, about, gallery, virtual-tour, holidays, school-information, pages, home-sections, alumni'
   );
   if (mssql.mode === 'missing') {
     console.warn('MSSQL is not configured — set MSSQL_* in .env next to package.json');
