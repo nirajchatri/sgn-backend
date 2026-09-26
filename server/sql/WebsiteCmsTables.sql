@@ -34,9 +34,17 @@ BEGIN
     Designation NVARCHAR(200) NOT NULL,
     AttachmentName NVARCHAR(300) NULL,
     AttachmentSize NVARCHAR(50) NULL,
+    AttachmentUrl NVARCHAR(MAX) NULL,
     SortOrder INT NOT NULL CONSTRAINT DF_WebsiteNotices_SortOrder DEFAULT (0),
     UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteNotices_UpdatedAt DEFAULT (SYSUTCDATETIME())
   );
+END
+GO
+
+IF OBJECT_ID(N'dbo.WebsiteNotices', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.WebsiteNotices', N'AttachmentUrl') IS NULL
+BEGIN
+  ALTER TABLE dbo.WebsiteNotices ADD AttachmentUrl NVARCHAR(MAX) NULL;
 END
 GO
 
@@ -169,6 +177,16 @@ BEGIN
     Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteSchoolInformation PRIMARY KEY,
     PayloadJson NVARCHAR(MAX) NOT NULL,
     UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteSchoolInformation_UpdatedAt DEFAULT (SYSUTCDATETIME())
+  );
+END
+GO
+
+IF OBJECT_ID(N'dbo.WebsiteSchoolMagazine', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.WebsiteSchoolMagazine (
+    Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteSchoolMagazine PRIMARY KEY,
+    PayloadJson NVARCHAR(MAX) NOT NULL,
+    UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteSchoolMagazine_UpdatedAt DEFAULT (SYSUTCDATETIME())
   );
 END
 GO

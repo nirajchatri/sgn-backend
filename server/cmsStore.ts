@@ -37,9 +37,16 @@ export async function ensureCmsSchema(): Promise<void> {
         Designation NVARCHAR(200) NOT NULL,
         AttachmentName NVARCHAR(300) NULL,
         AttachmentSize NVARCHAR(50) NULL,
+        AttachmentUrl NVARCHAR(MAX) NULL,
         SortOrder INT NOT NULL CONSTRAINT DF_WebsiteNotices_SortOrder DEFAULT (0),
         UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteNotices_UpdatedAt DEFAULT (SYSUTCDATETIME())
       );
+    END;
+
+    IF OBJECT_ID(N'dbo.WebsiteNotices', N'U') IS NOT NULL
+       AND COL_LENGTH(N'dbo.WebsiteNotices', N'AttachmentUrl') IS NULL
+    BEGIN
+      ALTER TABLE dbo.WebsiteNotices ADD AttachmentUrl NVARCHAR(MAX) NULL;
     END;
 
     IF OBJECT_ID(N'dbo.WebsiteHeroSlides', N'U') IS NULL
@@ -161,6 +168,15 @@ export async function ensureCmsSchema(): Promise<void> {
         Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteSchoolInformation PRIMARY KEY,
         PayloadJson NVARCHAR(MAX) NOT NULL,
         UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteSchoolInformation_UpdatedAt DEFAULT (SYSUTCDATETIME())
+      );
+    END;
+
+    IF OBJECT_ID(N'dbo.WebsiteSchoolMagazine', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.WebsiteSchoolMagazine (
+        Id NVARCHAR(32) NOT NULL CONSTRAINT PK_WebsiteSchoolMagazine PRIMARY KEY,
+        PayloadJson NVARCHAR(MAX) NOT NULL,
+        UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_WebsiteSchoolMagazine_UpdatedAt DEFAULT (SYSUTCDATETIME())
       );
     END;
 
@@ -318,6 +334,7 @@ export type NoticePayload = {
   designation: string;
   attachmentName?: string;
   attachmentSize?: string;
+  attachmentUrl?: string;
 };
 
 export async function fetchNotices(): Promise<NoticePayload[]> {
@@ -340,6 +357,7 @@ export async function fetchNotices(): Promise<NoticePayload[]> {
     designation: String(row.Designation),
     attachmentName: row.AttachmentName ? String(row.AttachmentName) : undefined,
     attachmentSize: row.AttachmentSize ? String(row.AttachmentSize) : undefined,
+    attachmentUrl: row.AttachmentUrl ? String(row.AttachmentUrl) : undefined,
   }));
 }
 
@@ -363,14 +381,15 @@ export async function replaceNotices(items: NoticePayload[]): Promise<NoticePayl
       req.input('Designation', sql.NVarChar(200), item.designation);
       req.input('AttachmentName', sql.NVarChar(300), item.attachmentName ?? null);
       req.input('AttachmentSize', sql.NVarChar(50), item.attachmentSize ?? null);
+      req.input('AttachmentUrl', sql.NVarChar(sql.MAX), item.attachmentUrl ?? null);
       req.input('SortOrder', sql.Int, i);
       await req.query(`
         INSERT INTO dbo.WebsiteNotices
           (Id, RefNo, Title, Category, NoticeDate, IsImportant, TargetAudience, Summary, FullContent,
-           SignedBy, Designation, AttachmentName, AttachmentSize, SortOrder, UpdatedAt)
+           SignedBy, Designation, AttachmentName, AttachmentSize, AttachmentUrl, SortOrder, UpdatedAt)
         VALUES
           (@Id, @RefNo, @Title, @Category, @NoticeDate, @IsImportant, @TargetAudience, @Summary, @FullContent,
-           @SignedBy, @Designation, @AttachmentName, @AttachmentSize, @SortOrder, SYSUTCDATETIME())
+           @SignedBy, @Designation, @AttachmentName, @AttachmentSize, @AttachmentUrl, @SortOrder, SYSUTCDATETIME())
       `);
     }
   });
@@ -795,6 +814,36 @@ export async function replaceSchoolInformation(
   return (await fetchSchoolInformation()) ?? payload;
 }
 
+export async function fetchSchoolMagazine(): Promise<Record<string, unknown> | null> {
+  await ensureCmsSchema();
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input('Id', sql.NVarChar(32), SINGLETON_ID)
+    .query(`SELECT PayloadJson FROM dbo.WebsiteSchoolMagazine WHERE Id = @Id`);
+  const row = result.recordset[0] as { PayloadJson?: string } | undefined;
+  if (!row?.PayloadJson) return null;
+  return parseJson(row.PayloadJson, null);
+}
+
+export async function replaceSchoolMagazine(
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  await ensureCmsSchema();
+  const pool = await getPool();
+  await pool
+    .request()
+    .input('Id', sql.NVarChar(32), SINGLETON_ID)
+    .input('PayloadJson', sql.NVarChar(sql.MAX), JSON.stringify(payload))
+    .query(`
+      MERGE dbo.WebsiteSchoolMagazine AS t
+      USING (SELECT @Id AS Id) AS s ON t.Id = s.Id
+      WHEN MATCHED THEN UPDATE SET PayloadJson = @PayloadJson, UpdatedAt = SYSUTCDATETIME()
+      WHEN NOT MATCHED THEN INSERT (Id, PayloadJson, UpdatedAt) VALUES (@Id, @PayloadJson, SYSUTCDATETIME());
+    `);
+  return (await fetchSchoolMagazine()) ?? payload;
+}
+
 export type PagePayload = {
   id: string;
   slug: string;
@@ -1003,6 +1052,7 @@ export type CmsBundle = {
   virtualTour: Record<string, unknown> | null;
   holidays: Record<string, unknown> | null;
   schoolInformation: Record<string, unknown> | null;
+  schoolMagazine: Record<string, unknown> | null;
   pages: PagePayload[];
   homeSections: Record<string, unknown> | null;
   alumni: AlumniPayload[];
@@ -1024,6 +1074,7 @@ export async function fetchCmsBundle(): Promise<CmsBundle> {
     virtualTour,
     holidays,
     schoolInformation,
+    schoolMagazine,
     pages,
     homeSections,
     alumni,
@@ -1041,6 +1092,7 @@ export async function fetchCmsBundle(): Promise<CmsBundle> {
     fetchVirtualTour(),
     fetchHolidays(),
     fetchSchoolInformation(),
+    fetchSchoolMagazine(),
     fetchPages(),
     fetchHomeSections(),
     fetchAlumni(),
@@ -1059,6 +1111,7 @@ export async function fetchCmsBundle(): Promise<CmsBundle> {
     virtualTour,
     holidays,
     schoolInformation,
+    schoolMagazine,
     pages,
     homeSections,
     alumni,
@@ -1079,6 +1132,7 @@ export async function replaceCmsBundle(bundle: {
   virtualTour?: Record<string, unknown>;
   holidays?: Record<string, unknown>;
   schoolInformation?: Record<string, unknown>;
+  schoolMagazine?: Record<string, unknown>;
   pages: PagePayload[];
   homeSections: Record<string, unknown>;
   alumni: AlumniPayload[];
@@ -1096,6 +1150,7 @@ export async function replaceCmsBundle(bundle: {
   if (bundle.virtualTour) await replaceVirtualTour(bundle.virtualTour);
   if (bundle.holidays) await replaceHolidays(bundle.holidays);
   if (bundle.schoolInformation) await replaceSchoolInformation(bundle.schoolInformation);
+  if (bundle.schoolMagazine) await replaceSchoolMagazine(bundle.schoolMagazine);
   await replacePages(bundle.pages);
   await replaceHomeSections(bundle.homeSections);
   await replaceAlumni(bundle.alumni ?? []);

@@ -9,6 +9,7 @@ import {
   fetchVirtualTour,
   fetchHolidays,
   fetchSchoolInformation,
+  fetchSchoolMagazine,
   fetchAnnouncements,
   fetchAlumni,
   fetchBlogPosts,
@@ -27,6 +28,7 @@ import {
   replaceVirtualTour,
   replaceHolidays,
   replaceSchoolInformation,
+  replaceSchoolMagazine,
   replaceAnnouncements,
   replaceAlumni,
   replaceBlogPosts,
@@ -161,6 +163,7 @@ app.get('/api/health', async (_req, res) => {
           '/api/virtual-tour',
           '/api/holidays',
           '/api/school-information',
+          '/api/school-magazine',
           '/api/cms',
           '/api/uploads',
           '/api/uploads/document',
@@ -179,6 +182,7 @@ app.get('/api/health', async (_req, res) => {
           'WebsiteVirtualTour',
           'WebsiteHolidays',
           'WebsiteSchoolInformation',
+          'WebsiteSchoolMagazine',
           'WebsitePages',
           'WebsiteHomeSections',
           'WebsiteAlumni',
@@ -245,6 +249,7 @@ app.put('/api/cms', requireCmsAuth, async (req, res) => {
         virtualTour?: Record<string, unknown>;
         holidays?: Record<string, unknown>;
         schoolInformation?: Record<string, unknown>;
+        schoolMagazine?: Record<string, unknown>;
         pages: PagePayload[];
         homeSections: Record<string, unknown>;
         alumni: AlumniPayload[];
@@ -365,6 +370,12 @@ singletonRoute(
   fetchSchoolInformation,
   replaceSchoolInformation,
   'school information'
+);
+singletonRoute(
+  '/api/school-magazine',
+  fetchSchoolMagazine,
+  replaceSchoolMagazine,
+  'school magazine'
 );
 singletonRoute('/api/home-sections', fetchHomeSections, replaceHomeSections, 'home sections');
 
@@ -521,7 +532,7 @@ app.listen(port, host, () => {
   const mssql = getMssqlDiagnostics();
   console.log(`SGN API listening on http://${host}:${port}`);
   console.log(
-    'CMS tables: menu, notices, hero-slides, announcements, blog, school-info, admissions, contact, about, gallery, virtual-tour, holidays, school-information, pages, home-sections, alumni'
+    'CMS tables: menu, notices, hero-slides, announcements, blog, school-info, admissions, contact, about, gallery, virtual-tour, holidays, school-information, school-magazine, pages, home-sections, alumni'
   );
   if (mssql.mode === 'missing') {
     console.warn('MSSQL is not configured — set MSSQL_* in .env next to package.json');
