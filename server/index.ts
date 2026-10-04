@@ -10,6 +10,8 @@ import {
   fetchHolidays,
   fetchSchoolInformation,
   fetchSchoolMagazine,
+  fetchSchoolNews,
+  fetchHolidayHomework,
   fetchAnnouncements,
   fetchAlumni,
   fetchBlogPosts,
@@ -29,6 +31,8 @@ import {
   replaceHolidays,
   replaceSchoolInformation,
   replaceSchoolMagazine,
+  replaceSchoolNews,
+  replaceHolidayHomework,
   replaceAnnouncements,
   replaceAlumni,
   replaceBlogPosts,
@@ -164,6 +168,8 @@ app.get('/api/health', async (_req, res) => {
           '/api/holidays',
           '/api/school-information',
           '/api/school-magazine',
+          '/api/school-news',
+          '/api/holiday-homework',
           '/api/cms',
           '/api/uploads',
           '/api/uploads/document',
@@ -183,6 +189,8 @@ app.get('/api/health', async (_req, res) => {
           'WebsiteHolidays',
           'WebsiteSchoolInformation',
           'WebsiteSchoolMagazine',
+          'WebsiteSchoolNews',
+          'WebsiteHolidayHomework',
           'WebsitePages',
           'WebsiteHomeSections',
           'WebsiteAlumni',
@@ -250,6 +258,8 @@ app.put('/api/cms', requireCmsAuth, async (req, res) => {
         holidays?: Record<string, unknown>;
         schoolInformation?: Record<string, unknown>;
         schoolMagazine?: Record<string, unknown>;
+        schoolNews?: Record<string, unknown>;
+        holidayHomework?: Record<string, unknown>;
         pages: PagePayload[];
         homeSections: Record<string, unknown>;
         alumni: AlumniPayload[];
@@ -376,6 +386,13 @@ singletonRoute(
   fetchSchoolMagazine,
   replaceSchoolMagazine,
   'school magazine'
+);
+singletonRoute('/api/school-news', fetchSchoolNews, replaceSchoolNews, 'school news');
+singletonRoute(
+  '/api/holiday-homework',
+  fetchHolidayHomework,
+  replaceHolidayHomework,
+  'holiday homework'
 );
 singletonRoute('/api/home-sections', fetchHomeSections, replaceHomeSections, 'home sections');
 
@@ -532,7 +549,7 @@ app.listen(port, host, () => {
   const mssql = getMssqlDiagnostics();
   console.log(`SGN API listening on http://${host}:${port}`);
   console.log(
-    'CMS tables: menu, notices, hero-slides, announcements, blog, school-info, admissions, contact, about, gallery, virtual-tour, holidays, school-information, school-magazine, pages, home-sections, alumni'
+    'CMS tables: menu, notices, hero-slides, announcements, blog, school-info, admissions, contact, about, gallery, virtual-tour, holidays, school-information, school-magazine, school-news, holiday-homework, pages, home-sections, alumni'
   );
   if (mssql.mode === 'missing') {
     console.warn('MSSQL is not configured — set MSSQL_* in .env next to package.json');
